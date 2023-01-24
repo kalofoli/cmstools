@@ -15,4 +15,13 @@ _urls = dict(
     teams='TeamGroupings/view/{index}',
     submission_items='SubmissionItems/index/limit:0/byTutorial:0/bySub:{index}',
     submissions='Submissions/index/limit:0',
+    students='students/index/limit:0/bytutorial:0/byA:0/cols:Si~Sm~Uu~Uf~Ul~Ue~Sgn~St~Sj~Ss~Sf~Sh',
+    testings='testingresults/enter/1',
+    import_csv='testingresults/import/{index}',
+    upload_report='contents/edit/12'
+)
+
+_sheets = dict(
+    shared='https://docs.google.com/spreadsheets/d/1WfeZJiTT_BZ5O7aFjNWxNhs70lOMmSj8j5zbmk_ITMI',
+    devel='https://docs.google.com/spreadsheets/d/1VJBvdoAGBSL3EtkSxBVsq4Zwtnto90WmtJDHvZxJF-A'    
 )

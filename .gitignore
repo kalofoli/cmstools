@@ -1,0 +1,16 @@
+# Development
+.metadata
+*.swp
+
+# eclipse
+/.project
+/.pydevproject
+/.settings
+
+# devel files
+/cache
+__pycache__
+
+#
+# Jupyter Notebook
+.ipynb_checkpoints
