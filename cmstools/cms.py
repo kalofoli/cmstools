@@ -81,7 +81,8 @@ class CMSSession:
             if verify_login is None: verify_login = self.verify_login
             if verify_login:
                 e = root.xpath(self._xpaths['login_action'])
-                assert len(e)==1 and e[0] == self._strings['login_response'], f'While downloading url "{url}" could not find logout button. This probably means your session is invalid.'
+                if not (len(e)==1 and e[0] == self._strings['login_response']):
+                    raise LoginError(f'While downloading url "{url}" could not find logout button. This probably means your session is invalid.')
                 msg = root.xpath('//div[@id="authMessage"]/text()')
                 if len(msg):
                     raise LoginError(msg[0])
@@ -92,7 +93,7 @@ class CMSSession:
         return text, root
 
     def __call__(self, url='landing', verify_login=None, cache=None, cache_key=None, data=None):
-        return self._retrieve_url(url, cache=cache, cache_key=cache_key, verify_login=True, data=data)
+        return self._retrieve_url(url, cache=cache, cache_key=cache_key, verify_login=verify_login, data=data)
 
     def fetch_team(self, index, cache=None, verify_login=None):
         url = self._urls['teams'].format(index=index)
@@ -189,4 +190,28 @@ class CMSSession:
                 raise ParseError(prefix + f'Could not find an error or success tag in the response element.')
         return (html,r), dct_updates
 
-
+    @classmethod
+    def _parse_form(cls, e_f, hidden=True, types=[]):
+        types = (['hidden'] if hidden else []) + list(types)
+        stype = " or ".join(f'@type="{t}"' for t in types)
+        e_inp = e_f.xpath(f'.//input[{stype}]')
+        data = {**dict((e_i.attrib['name'],e_i.attrib.get('value')) for e_i in e_inp)}
+        return data
+        
+    def logout(self):
+        url = self._urls['logout']
+        r = self()[1]
+        e_f = r.xpath('/html/body//form[@id="logoutForm"]')[0]
+        data = self._parse_form(e_f)
+        log.info(f'Requested logout.')
+        import http
+        max_reqs = http.client._MAXHEADERS
+        http.client._MAXHEADERS = 5000 
+        try:
+            self(url, data=data)
+        except LoginError:
+            return
+        finally:
+            http.client._MAXHEADERS = max_reqs
+        raise ParseError('Failed to logout')
+        

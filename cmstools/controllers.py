@@ -18,7 +18,8 @@ import gspread
 
 from cmstools.parsers import TeamParser, SubmissionItemParser, SubmissionListParser, TestingParser, StudentParser
 from cmstools.cms import CMSSession
-from cmstools.common import memoised_property
+from cmstools.common import memoised_property, GradingError, GradingWarning,\
+    GatheredGradeSelector
 from cmstools.reports import HTMLReport
 from cmstools.sheets import GradesView, TableView
 
@@ -316,6 +317,32 @@ class CMSController:
             return SimpleNamespace(merged=df, cms=df_cms, gs=df_gs)
         else:
             return df
+    
+    def update_from_gathered(self, df_gg, dry=True, ignore_collisions=False):
+        '''Update grades from a gathered DataFrame, as the one computed by gather_grades.
+        
+        @param ignore_collisions: Proceed despite collisions. Colliding entries are omitted with a warning.
+        '''
+        s = GatheredGradeSelector(df_gg)
+        s_ok = s.gs_miss_cms
+        idl_err = s_ok.idl_err_collide_teamgs
+        df_col = s_ok.df.loc[idl_err]
+        if idl_err.any():
+            serr = f'There were {df_col.shape[0]} colliding team grades for students {", ".join(df_col.MN)}.'
+            if not ignore_collisions:
+                raise GradingError(serr)
+            else:
+                log.warning(GradingWarning(serr))
+            s_ok.reset(s_ok.df.loc[~idl_err])
+        idl_ok = s_ok.idl_nn_gs | s_ok.idl_nn_gs_p
+        if (~idl_ok).any():
+            log.warning(GradingWarning(f'Missing grades for {idl_ok.sum()} students: {", ".join(s_ok.df[idl_ok].MN)}.'))
+        s_ok.reset(idl_ok)
+        s_pts = s_ok.df.PointsGS
+        idl_pair = s_ok.idl_nn_gs_p & ~s_ok.idl_nn_gs
+        s_pts[idl_pair] = s_ok.df.PointsPartnerGS[idl_pair]
+        df_long = s_ok.df.assign(Points=s_pts)
+        return self.set_grades_long(df_long, dry=dry),df_long
 
 
 
@@ -335,7 +362,7 @@ class SheetController:
     @memoised_property
     def view_grading(self): return GradesView(self.ws_grading)
     @memoised_property
-    def view_exceptions(self): return TableView(self.ws_exceptions, index=['MN','Assignment','Problem'],row_sel=lambda i,x:len(i[0])==7)
+    def view_exceptions(self): return TableView(self.ws_exceptions, index=['MN','Assignment','Problem'],row_sel=lambda i,x:(len(i[0])==7) or i[0].lower() == 'all')
     @memoised_property
     def view_workload(self): return TableView(self.ws_workload,index=[('Key','Assignment'),('Key','Problem')], headers=2)
     @classmethod
@@ -360,7 +387,7 @@ class SheetController:
             df_st = steams.merged
             s_sub = steams.submissions.iloc[0]
             if highlight is not None:
-                self.view_grading.highlight_submissions(df_st, s_sub, styles= None if highlight is True else 'clear')
+                self.view_grading.highlight_submissions(df_st, s_sub, styles= None if highlight is True else 'default')
             if notes is not None:
                 params = dict(fmt=lambda **kwargs:'') if notes is False else {}
                 self.view_grading.annotate_partners(df_st, s_sub, **params)

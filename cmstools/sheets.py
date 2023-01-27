@@ -246,7 +246,7 @@ class TableView(ArrayView):
             col_df2arr = col_df2arr[idl]
         self._df = df
         self._row_df2arr = row_df2arr
-        self._row_key2df = pd.Series(np.arange(len(data_index)), index=data_index)
+        self._row_key2df = pd.Series(np.arange(len(data_index)), index=df.index)
         self._col_df2arr = col_df2arr
         return self
 

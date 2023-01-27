@@ -8,9 +8,7 @@
 /.settings
 
 # devel files
-/cache
+/notebooks/cache
 __pycache__
-
-#
-# Jupyter Notebook
-.ipynb_checkpoints
+/notebooks/.ipynb_checkpoints
+/notebooks/credentials.json
