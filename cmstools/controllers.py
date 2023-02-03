@@ -81,6 +81,9 @@ class CMSController:
     @memoised_property
     def submission_items(self):
         return self.get_submission_item()
+    @memoised_property
+    def submission_teams(self):
+        return self.find_submission_teams(None, None, only_columns=None)
     @property
     def submissions_graded(self):
         df = self.submissions
@@ -133,7 +136,7 @@ class CMSController:
         single=['MN','TeamId','FounderMN','PartnerMN','MNs'],
         compact=['MN','Assignment','Problem','TeamId','SubId','FeedbackSol','PairMN','MNs'],
         compact_teams=['MN','Assignment','Problem','TeamId','SubId','FeedbackSol','FounderMN','PartnerMN','PairMN','MNs'],
-        named=['MN','StudentName','# Members','TeamId','FounderName','FounderMN','PartnerName','PartnerMN','MNs']
+        named=['MN','StudentName','# Members','TeamId','FounderName','FounderMN','PartnerName','PartnerMN','PairMN','MNs']
     )
     def find_submission_teams(self, assignment, problem, only_columns='compact', extra=False, explode=False):
         df_sub = self.find_submission(assignment, problem, multiple=True, only_grades=True)
@@ -225,6 +228,20 @@ class CMSController:
     def _distribute_teams(self, df_g_long, df_subs, only_graded=False):
         df_st = self.get_submission_teams(df_subs,only_columns='compact_teams')
         return self._distribute_teams_st(df_g_long=df_g_long, df_st=df_st, only_graded=only_graded)
+
+    def distribute_teams_long(self, df_g_long, df_subs=None, only_graded=True, points_joined='PointsTeam'):
+        '''For the long format, extend the entries with the grade of their team partner.
+        
+        @param points_joined: the name of an additional column to add that joins the points of each team member.
+            Whereever there is a collision between the points of the two members, the value fo this column is NA.'''
+        if df_subs is None:
+            df_subs = self.submissions_graded
+        df_st = self.submission_teams[self._column_sets['compact_teams']]
+        df = self._distribute_teams_st(df_g_long, df_st, only_graded=only_graded)
+        df = self._fill_pair(df)
+        if points_joined is not None and points_joined:
+            df[points_joined] = df.Points.where(~df.Points.isna(), df.PointsPartner).where(df.Points.isna() | df.PointsPartner.isna() | (df.PointsPartner==df.Points))
+        return df
 
     @classmethod
     def _fill_pair(cls,df):
