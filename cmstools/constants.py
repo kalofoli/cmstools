@@ -24,5 +24,5 @@ _urls = dict(
 
 _sheets = dict(
     shared='https://docs.google.com/spreadsheets/d/1WfeZJiTT_BZ5O7aFjNWxNhs70lOMmSj8j5zbmk_ITMI',
-    devel='https://docs.google.com/spreadsheets/d/1VJBvdoAGBSL3EtkSxBVsq4Zwtnto90WmtJDHvZxJF-A'    
+    devel='https://docs.google.com/spreadsheets/d/1h_74R12As5cVkFkenz_cXC_hbJmZGuQ4fexELCHWyUU'    ,
 )

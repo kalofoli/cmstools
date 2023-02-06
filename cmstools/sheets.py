@@ -9,25 +9,8 @@ import gspread
 from logging import getLogger
 log = getLogger('cmstools')
 
+import cmstools.utils # monkeypatching
 
-def update_notes(self, notes):
-        """Update the content of the notes located at `cell`.
-        @param notes A sequence of (cell, content) pairs, where cell is a string with cell coordinates in A1 notation,
-            e.g. 'D7', and content is a string with the text note to insert.
-        """
-
-        requests = []
-        for cell, content in notes:
-            grid_range = gspread.utils.a1_range_to_grid_range(cell, self.id)
-            request = dict(updateCells={
-                "range": grid_range,
-                "rows": [{"values": [{"note": content}]}],
-                "fields": "note",
-            })
-            requests.append(request)
-        body = dict(requests=requests)
-        self.spreadsheet.batch_update(body)
-gspread.Worksheet.update_notes = update_notes
 
 class ArrayView:
     def __init__(self, ws, _data=None, vro='formatted'):
@@ -120,6 +103,12 @@ class ArrayView:
         if len(texts) == 1: texts *= len(ranges)
         assert len(ranges)==len(texts),f'You must provide either a single annotation or one for each provided cell.'
         return self.ws.update_notes(list(zip(ranges, texts)))
+    def border_rowcol(self, rows, cols, borders, presets={}):
+        ranges = self._rowcol_to_a1(rows, cols)
+        if isinstance(borders,(str,tuple,dict)): borders = [borders]
+        if len(borders) == 1: borders *= len(ranges)
+        assert len(ranges)==len(borders),f'You must provide either a single border specification or one for each provided cell.'
+        return self.ws.update_borders(list(zip(ranges, borders)), presets=presets)
     @property
     def data(self): return self._data.copy()
     @property
@@ -220,7 +209,6 @@ class TableView(ArrayView):
 
         num_hdr, idx_indices, cols_idx, columns = self.parse_index(index, headers, data)
         
-        row_offset = self.row_offset = num_hdr
         self.index_idx = idx_indices
         col_df2arr = np.delete(np.arange(data.shape[1]), idx_indices)
         data_index, data_body = data[num_hdr:,idx_indices], np.delete(data[num_hdr:,], idx_indices,axis=1)
@@ -246,15 +234,17 @@ class TableView(ArrayView):
             col_df2arr = col_df2arr[idl]
         self._df = df
         self._row_df2arr = row_df2arr
-        self._row_key2df = pd.Series(np.arange(len(data_index)), index=df.index)
+        self._row_key2df = pd.Series(np.arange(df.shape[0]), index=df.index)
         self._col_df2arr = col_df2arr
         return self
 
+_rex_mn = re.compile('^[0-9]{7}$')
+def is_valid_mn(x):
+    return _rex_mn.match(x) is not None
+
 class GradesView(TableView):
-    rex_mn = re.compile('^[0-9]{7}$')
-    rex_num = re.compile('^[0-9]+$')
     @classmethod
-    def _row_sel(cls, i, row): return cls.rex_mn.match(i) is not None
+    def _row_sel(cls, i, row): return is_valid_mn(i)
     @classmethod
     def _col_sel(cls, i, col): return i[1].lower().strip() != 'total'
 
@@ -394,6 +384,29 @@ class GradesView(TableView):
         idx_rows = self._row_iloc(s_par)
         log.info(f'Annotating assignment {s_info.Assignment} problem {s_info.Problem} of submission {s_info.Id} with {len(s_par)} partners.')
         self.note_rowcol(idx_rows, idx_col, texts)
-        
+    
+    def update_borders_long(self, df_a_long, style='default'):
+        df_idx = df_a_long.groupby(['Assignment','Problem']).apply(
+            lambda x:x.assign(col_idx=np.where(self._column_index(assignment=x.Assignment.iloc[0], problem=x.Problem.iloc[0]))[0][0])
+        ).assign(row_idx=lambda x:self._row_iloc(x.MN))
+        return self.border_rowcol(df_idx.row_idx, df_idx.col_idx, borders=style)
 
+class EligibilityView(TableView):
+    @classmethod
+    def _row_sel(cls, i, row): return is_valid_mn(i)
+    @classmethod
+    def _col_sel(cls, i, col): return i[0].lower().strip() != 'mn'
+    def __init__(self, ws, _data=None, vro='formatted'):
+        super().__init__(
+            ws=ws, _data=_data, vro=vro,
+            index=('Student Information','MN'),headers=2,
+            row_sel=self._row_sel,col_sel=self._col_sel
+        )
+
+    @property
+    def df_priority_practical(self):
+        return self.df.loc[self._df[('Priority','Practical')]=='1']
+    @property
+    def df_priority_theoretical(self):
+        return self.df.loc[self._df[('Priority','Theoretical')]=='1']
 

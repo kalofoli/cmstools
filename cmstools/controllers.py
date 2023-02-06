@@ -21,7 +21,7 @@ from cmstools.cms import CMSSession
 from cmstools.common import memoised_property, GradingError, GradingWarning,\
     GatheredGradeSelector
 from cmstools.reports import HTMLReport
-from cmstools.sheets import GradesView, TableView
+from cmstools.sheets import GradesView, TableView, EligibilityView
 
 
 logging.basicConfig()
@@ -377,11 +377,15 @@ class SheetController:
     @memoised_property
     def ws_workload(self): return self.get_worksheet_by_title('Tutor Workload')
     @memoised_property
+    def ws_eligibility(self): return self.get_worksheet_by_title('Eligibility')
+    @memoised_property
     def view_grading(self): return GradesView(self.ws_grading)
     @memoised_property
     def view_exceptions(self): return TableView(self.ws_exceptions, index=['MN','Assignment','Problem'],row_sel=lambda i,x:(len(i[0])==7) or i[0].lower() == 'all')
     @memoised_property
     def view_workload(self): return TableView(self.ws_workload,index=[('Key','Assignment'),('Key','Problem')], headers=2)
+    @memoised_property
+    def view_eligibility(self): return EligibilityView(self.ws_eligibility)
     @classmethod
     def from_credentials(cls, filename='credentials.json', tag='shared'):
         gc = gspread.auth.service_account(filename=filename)
