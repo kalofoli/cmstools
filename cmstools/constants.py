@@ -17,6 +17,7 @@ _urls = dict(
     submission_items='SubmissionItems/index/limit:0/byTutorial:0/bySub:{index}',
     submissions='Submissions/index/limit:0',
     students='students/index/limit:0/bytutorial:0/byA:0/cols:Si~Sm~Uu~Uf~Ul~Ue~Sgn~St~Sj~Ss~Sf~Sh',
+    student_cols='students/index/limit:0/bytutorial:0/byA:0/cols:Sm~{cols}/format:csv',
     testings='testingresults/enter/1',
     import_csv='testingresults/import/{index}',
     upload_report='contents/edit/12',
@@ -25,4 +26,12 @@ _urls = dict(
 _sheets = dict(
     shared='https://docs.google.com/spreadsheets/d/1WfeZJiTT_BZ5O7aFjNWxNhs70lOMmSj8j5zbmk_ITMI',
     devel='https://docs.google.com/spreadsheets/d/1h_74R12As5cVkFkenz_cXC_hbJmZGuQ4fexELCHWyUU'    ,
+)
+
+_testing_ids = dict(
+    theoretical = 37,
+    practical = 40,
+    admission1 = 55,
+    exceptions1 = 56,
+    seating = 58,
 )

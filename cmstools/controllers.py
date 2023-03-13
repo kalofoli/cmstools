@@ -5,7 +5,7 @@ Created on Jan 19, 2023
 '''
 
 
-
+import io
 import typing
 import logging
 import itertools
@@ -22,6 +22,7 @@ from cmstools.common import memoised_property, GradingError, GradingWarning,\
     GatheredGradeSelector
 from cmstools.reports import HTMLReport
 from cmstools.sheets import GradesView, TableView, EligibilityView
+from cmstools.constants import _testing_ids
 
 
 logging.basicConfig()
@@ -50,6 +51,25 @@ def multiple_index_getter(default_from, with_coc=True, name=None):
     return decorator
 
 
+class _NamedTestings:
+    def __init__(self, cms):
+        self._cms = cms
+    
+    def __dir__(self):
+        return list(super().__dir__()) + list(_testing_ids.keys())
+    def __getattr__(self, attr):
+        tid = _testing_ids.get(attr)
+        if tid is None:
+            raise AttributeError(f'No attribute {attr}.')
+        csv = self._cms.fetch_testings_csv([tid])
+        val = pd.read_csv(io.StringIO(csv)).rename({'Matriculation':'MN'},axis=1)\
+            .astype({'MN':str}).set_index('MN').iloc[:,0]
+        setattr(self, attr, val)
+        return val
+
+        
+
+
 class CMSController:
     def __init__(self, session):
         self.cms = CMSSession(session) if isinstance(session, str) else session
@@ -67,6 +87,10 @@ class CMSController:
         root = self.cms.fetch_sub_item(index)[1]
         return SubmissionItemParser(root).data.assign(SubId=index)
 
+    @memoised_property
+    def named_testings(self): return _NamedTestings(self.cms)
+    nt = named_testings
+    
     @memoised_property
     def students(self):
         root = self.cms.fetch_students()[1]
@@ -421,3 +445,4 @@ class SheetController:
         with vw.open() as df:
             df[('Difficulty','Submissions')] = s_ns[vw.df.index]
         return s_ns
+

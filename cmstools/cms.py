@@ -120,6 +120,11 @@ class CMSSession:
         sids = ','.join(map(str, sorted(indices)))
         cache_key = f"keyed_testing_{sids}?tutorial={tutorial}"
         return self(url, cache=cache, verify_login=verify_login, cache_key=cache_key, data=data)
+    
+    def fetch_testings_csv(self, ids):
+        scols = '~'.join(f'T{t}' for t in ids)
+        url = self._urls['student_cols'].format(cols=scols)
+        return self(url, verify_login=False, cache_key=f'keyed-testing-{scols}')[0]
 
     rex_import = re.compile('^File imported, (?P<num>[0-9]+) entries have been saved.$')
     def submit_grades(self, index, mns, points, dry=False, cache=None, verify_login=None, verify_response=True):
