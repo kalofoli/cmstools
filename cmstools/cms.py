@@ -13,6 +13,7 @@ from .constants import _xpaths, _strings, _urls
 from .common import CMSError, ParseError, LoginError
 
 from lxml import etree
+from types import SimpleNamespace
 
 
 
@@ -30,6 +31,7 @@ class CMSSession:
         self.cache = cache
         self.verify_login = verify_login
         self.store = store
+        self._sess = requests.session()
 
     @classmethod
     def parse_dom_from_html(cls, html):
@@ -39,17 +41,21 @@ class CMSSession:
         tree = etree.parse(StringIO(html), p)
         return tree.getroot()
     
-    def _download_url(self, url, data=None):
+    def _download_url(self, url, data=None, files=None, extra=False, dry=False):
         cookies = {'CakeCMS': self.sid}
-        full_url = f"{self._urls['base']}{url}"
-        if data is None:
-            resp = requests.get(full_url,cookies=cookies)
+        full_url = f"{self._urls['base']}{url}" if not url.startswith('http') else url
+        headers = {'Origin':self._urls['origin']}
+        method = 'GET' if data is None and files is None else 'POST' 
+        req = requests.Request(method=method, url=full_url, files=files, data=data, cookies=cookies, headers=headers).prepare()
+        if not dry:
+            resp = self._sess.send(req)
+            text = resp.text
+            from http import HTTPStatus
+            if resp.status_code != HTTPStatus.OK:
+                raise CMSError(f'While downloading url {full_url} with data "{data}" a non-ok status of {resp.status_code} was received.')
         else:
-            resp = requests.post(full_url,cookies=cookies, data=data)
-        from http import HTTPStatus
-        if resp.status_code != HTTPStatus.OK:
-            raise CMSError(f'While downloading url {resp.url} with data "{data}" a non-ok status of {resp.status_code} was received.')
-        return resp.text
+            resp,text = None,None
+        return SimpleNamespace(text=text,request=req,response=resp) if extra else resp.text
     
     def request_url(self, url, data=None):
         '''Request a url without caching.
@@ -58,7 +64,7 @@ class CMSSession:
         html = self._download_url(url=url, data=data)
         return html, self.parse_dom_from_html(html)
         
-    def _retrieve_url(self, url, cache=None, cache_key=None, verify_login=True, data=None):
+    def _retrieve_url(self, url, cache=None, cache_key=None, verify_login=True, data=None, files=None):
         if cache is None:
             cache = self.cache if (data is None or cache_key is not None) else False
         text = None
@@ -74,7 +80,7 @@ class CMSSession:
                 if not isinstance(e, FileNotFoundError):
                     log.info(f'While trying to load file {url} from cache: {e}')
         if text is None:
-            text = self._download_url(url, data=data)
+            text = self._download_url(url, data=data, files=files)
         
             root = self.parse_dom_from_html(text)
             
@@ -92,8 +98,8 @@ class CMSSession:
                     log.info(f'Stored contents of url "{url}" as file "{cache_path}".')
         return text, root
 
-    def __call__(self, url='landing', verify_login=None, cache=None, cache_key=None, data=None):
-        return self._retrieve_url(url, cache=cache, cache_key=cache_key, verify_login=verify_login, data=data)
+    def __call__(self, url='landing', verify_login=None, cache=None, cache_key=None, data=None, files=None):
+        return self._retrieve_url(url, cache=cache, cache_key=cache_key, verify_login=verify_login, data=data, files=files)
 
     def fetch_team(self, index, cache=None, verify_login=None):
         url = self._urls['teams'].format(index=index)
@@ -220,3 +226,50 @@ class CMSSession:
             http.client._MAXHEADERS = max_reqs
         raise ParseError('Failed to logout')
         
+    def _verify_response(self, root, rex=None):
+        ''' Verify a response in a given element.
+        @return If rex is provided, the named groups starting with resp_ are returned (without theyr prefix). Otherwise the raw text in the success alert.
+        Upon error it raises a CMSError.
+        '''
+        e = root.xpath('.//div[contains(@class,"alert")]')
+        if len(e) == 0:
+            raise ParseError(f'No response message found.')
+        e_r = e[0]
+        stxt = e_r.text.strip()
+        e_r_cls = e_r.attrib['class']
+        if 'alert-error' in e_r_cls:
+            raise CMSError(stxt)
+        if 'alert-success' in e_r_cls:
+            if rex is not None:
+                m = rex.match(stxt)
+                if m is None:
+                    raise ParseError(f'The response returned was "{stxt}" which was not in the expected format.')
+                else:
+                    return {k[5:]:v for k,v in m.groupdict().items() if k.startswith('resp_')}
+            else:
+                return stxt
+        else:
+            raise ParseError(f'Could not find an error or success tag in the response element.')
+        
+    _rex_submit = re.compile('Your solution has been submitted: (?P<resp_bytes>[0-9]+) bytes, SHA256=(?P<resp_sha256>[a-z0-9]+)$')
+    def upload_submission(self, sub_id, mn, file,file_name="upload.pdf", content_type="application/pdf", verify_result=True, cache=None):
+        url = _urls['student_view'].format(mn=mn)
+        root = self(url,cache_key=f'keyed_student_{mn}', cache=cache)[1]
+        
+        els = root.xpath(f'//body/div[@class="container"]/div[@class="row"]//div[@id="content"]/div[@id="submissions"]/table//div[@id="SubmissionUpload{sub_id}"]')
+        if len(els) == 0:
+            raise ParseError(f'Could not find upload information for submission {sub_id}.')
+        el = els[0]
+        data = self._parse_form(el)
+        files = {'data[SubmissionItem][upload]':(file_name, file, content_type)}
+        root = self(_urls['upload_submission'],data=data, files=files,cache=False)[1]
+        if verify_result:
+            try:
+                res_dct = self._verify_response(root.xpath('//div[@id="submissions"]')[0], rex=self._rex_submit)
+                res = SimpleNamespace(**res_dct)
+                log.info(f'Submitted id:{sub_id} for MN: {mn} file of {res.bytes} bytes and SHA356: {res.sha256}.')
+            except ParseError as e:
+                raise ParseError(f'Failed to submit id: {sub_id} for MN: {mn}.') from e
+        else:
+            res = None
+        return res

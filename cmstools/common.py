@@ -13,7 +13,9 @@ import pandas as pd
 class CMSError(Exception): pass
 class ParseError(Exception):
     def __init__(self, what):
-        super().__init__(what + ' This could be due to a change in the CMS website or another parsing error. Please contact developers.')
+        super().__init__(what)
+    def __str__(self):
+        return super().__str__() + ' This could be due to a change in the CMS website or another parsing error. Please contact developers.'
 class LoginError(Exception): pass
 
 class GradingError(Exception): pass
