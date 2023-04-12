@@ -169,6 +169,7 @@ class CMSSession:
                 rows = None
         else:
             html,r = '',None
+            rows = None
         return rows, (html,r), csv        
 
     def update_report(self, content=None, title=None, menu_visible=None, verify_login=None, verify_response=True):
